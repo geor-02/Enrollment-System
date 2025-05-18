@@ -1,20 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function Dashboard() {
   const router = useRouter();
-  const [notifications, setNotifications] = useState([
-    { id: "1", text: "Here you can manage your notifications" },
-  ]);
-  const [schedules, setSchedules] = useState([
-    { id: "1", text: "Here you can manage your schedules." },
-  ]);
-  const [tasks, setTasks] = useState([
-    { id: "1", text: "Here you can manage your tasks." },
-  ]);
+  const [notifications, setNotifications] = useState([]);
+  const [schedules, setSchedules] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState("");
   const [modalText, setModalText] = useState("");
@@ -23,7 +17,47 @@ export default function Dashboard() {
   const [confirmAction, setConfirmAction] = useState(null);
   const [confirmMessage, setConfirmMessage] = useState("");
 
-  const generateId = () => Math.random().toString(36).substr(2, 9);
+  useEffect(() => {
+    fetchNotifications();
+    fetchSchedules();
+    fetchTasks();
+  }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch("/api/faculty/notifications");
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch notifications", error);
+    }
+  };
+
+  const fetchSchedules = async () => {
+    try {
+      const res = await fetch("/api/faculty/schedules");
+      if (res.ok) {
+        const data = await res.json();
+        setSchedules(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch schedules", error);
+    }
+  };
+
+  const fetchTasks = async () => {
+    try {
+      const res = await fetch("/api/faculty/tasks");
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch tasks", error);
+    }
+  };
 
   const openModal = (type, text = "", id = null) => {
     setModalType(type);
@@ -47,59 +81,79 @@ export default function Dashboard() {
     setConfirmAction(null);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (editingId) {
-      // Open confirm modal without closing edit modal to preserve state
-      openConfirmModal("Are you sure you want to save the changes?", () => {
-        if (modalType === "notification") {
-          setNotifications(
-            notifications.map((n) =>
-              n.id === editingId ? { ...n, text: modalText } : n
-            )
-          );
-        } else if (modalType === "schedule") {
-          setSchedules(
-            schedules.map((s) =>
-              s.id === editingId ? { ...s, text: modalText } : s
-            )
-          );
-        } else if (modalType === "task") {
-          setTasks(
-            tasks.map((t) =>
-              t.id === editingId ? { ...t, text: modalText } : t
-            )
-          );
+      openConfirmModal("Are you sure you want to save the changes?", async () => {
+        try {
+          const payload = { _id: editingId, text: modalText };
+          const res = await fetch(`/api/faculty/${modalType}s`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) {
+            const updated = await res.json();
+            if (modalType === "notification") {
+              setNotifications(notifications.map((n) => (n._id === editingId ? updated : n)));
+            } else if (modalType === "schedule") {
+              setSchedules(schedules.map((s) => (s._id === editingId ? updated : s)));
+            } else if (modalType === "task") {
+              setTasks(tasks.map((t) => (t._id === editingId ? updated : t)));
+            }
+          }
+        } catch (error) {
+          console.error("Failed to update", error);
         }
         closeModal();
       });
     } else {
-      if (modalType === "notification") {
-        setNotifications([{ id: generateId(), text: modalText }, ...notifications]);
-      } else if (modalType === "schedule") {
-        setSchedules([{ id: generateId(), text: modalText }, ...schedules]);
-      } else if (modalType === "task") {
-        setTasks([{ id: generateId(), text: modalText }, ...tasks]);
+      try {
+        const payload = { text: modalText };
+        const res = await fetch(`/api/faculty/${modalType}s`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const created = await res.json();
+          if (modalType === "notification") {
+            setNotifications([created, ...notifications]);
+          } else if (modalType === "schedule") {
+            setSchedules([created, ...schedules]);
+          } else if (modalType === "task") {
+            setTasks([created, ...tasks]);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to create", error);
       }
       closeModal();
     }
   };
 
   const deleteItem = (type, id) => {
-    // Open confirm modal before deleting
-    openConfirmModal("Are you sure you want to delete this item?", () => {
-      if (type === "notification") {
-        setNotifications(notifications.filter((n) => n.id !== id));
-      } else if (type === "schedule") {
-        setSchedules(schedules.filter((s) => s.id !== id));
-      } else if (type === "task") {
-        setTasks(tasks.filter((t) => t.id !== id));
+    openConfirmModal("Are you sure you want to delete this item?", async () => {
+      try {
+        const res = await fetch(`/api/faculty/${type}s?id=${id}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          if (type === "notification") {
+            setNotifications(notifications.filter((n) => n._id !== id));
+          } else if (type === "schedule") {
+            setSchedules(schedules.filter((s) => s._id !== id));
+          } else if (type === "task") {
+            setTasks(tasks.filter((t) => t._id !== id));
+          }
+        }
+      } catch (error) {
+        console.error("Failed to delete", error);
       }
       closeModal();
     });
   };
 
   const handleSignOut = () => {
-    // Implement sign out logic here (e.g., clear auth tokens, redirect to login)
     console.log("Signing out...");
     setShowMenu(false);
     router.push("/");
@@ -109,58 +163,58 @@ export default function Dashboard() {
     <div className="bg-white m-0 min-h-screen">
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-96">
-        {modalType === "confirm" ? (
-          <>
-            <h2 className="text-xl font-bold mb-4 text-black">Confirmation</h2>
-            <p className="mb-4 text-black">{confirmMessage}</p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={closeModal}
-                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (confirmAction) {
-                    confirmAction();
-                  }
-                }}
-                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 cursor-pointer"
-              >
-                Confirm
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <h2 className="text-xl font-bold mb-4 text-black">
-              {editingId ? `Edit ${modalType}` : `Add ${modalType}`}
-            </h2>
-            <textarea
-              className="w-full p-2 border rounded mb-4 text-black"
-              value={modalText}
-              onChange={(e) => setModalText(e.target.value)}
-              placeholder={`Enter ${modalType} text`}
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={closeModal}
-                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 cursor-pointer"
-              >
-                {editingId ? "Save" : "Add"}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+          <div className="bg-white p-6 rounded-lg shadow-lg w-96">
+            {modalType === "confirm" ? (
+              <>
+                <h2 className="text-xl font-bold mb-4 text-black">Confirmation</h2>
+                <p className="mb-4 text-black">{confirmMessage}</p>
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={closeModal}
+                    className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirmAction) {
+                        confirmAction();
+                      }
+                    }}
+                    className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 cursor-pointer"
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-xl font-bold mb-4 text-black">
+                  {editingId ? `Edit ${modalType}` : `Add ${modalType}`}
+                </h2>
+                <textarea
+                  className="w-full p-2 border rounded mb-4 text-black"
+                  value={modalText}
+                  onChange={(e) => setModalText(e.target.value)}
+                  placeholder={`Enter ${modalType} text`}
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={closeModal}
+                    className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 cursor-pointer"
+                  >
+                    {editingId ? "Save" : "Add"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
       <div className="flex flex-row items-start relative">
@@ -288,11 +342,11 @@ export default function Dashboard() {
                 <table className="min-w-full text-black bg-gray p-1 border-separate border border-gray-300 table-auto">
                   <tbody>
                     {notifications.map((notification) => (
-                      <tr key={notification.id} className="bg-gray">
+                      <tr key={notification._id} className="bg-gray">
                         <td className="border border-gray-300 px-4 py-2 break-words whitespace-normal max-w-xs">{notification.text}</td>
                         <td className="border border-gray-300 px-2 py-2 text-center w-12">
                           <button
-                            onClick={() => openModal("notification", notification.text, notification.id)}
+                            onClick={() => openModal("notification", notification.text, notification._id)}
                             className="bg-yellow-500 text-white px-2 py-1 rounded-full hover:bg-yellow-600 inline-flex items-center justify-center cursor-pointer mr-2"
                             aria-label="Edit notification"
                           >
@@ -303,7 +357,7 @@ export default function Dashboard() {
                         </td>
                         <td className="border border-gray-300 px-2 py-2 text-center w-12">
                           <button
-                            onClick={() => deleteItem("notification", notification.id)}
+                            onClick={() => deleteItem("notification", notification._id)}
                             className="bg-red-500 text-white px-2 py-1 rounded-full hover:bg-red-600 inline-flex items-center justify-center cursor-pointer"
                             aria-label="Delete notification"
                           >
@@ -339,11 +393,11 @@ export default function Dashboard() {
                 <table className="min-w-full text-black bg-grey p-1 border-separate border border-gray-300 table-auto">
                   <tbody>
                     {schedules.map((schedule) => (
-                      <tr key={schedule.id} className="bg-grey">
+                      <tr key={schedule._id} className="bg-grey">
                         <td className="border border-gray-300 px-4 py-2 break-words whitespace-normal max-w-xs">{schedule.text}</td>
                         <td className="border border-gray-300 px-2 py-2 text-center w-12">
                           <button
-                            onClick={() => openModal("schedule", schedule.text, schedule.id)}
+                            onClick={() => openModal("schedule", schedule.text, schedule._id)}
                             className="bg-yellow-500 text-white px-2 py-1 rounded-full hover:bg-yellow-600 inline-flex items-center justify-center cursor-pointer mr-2"
                             aria-label="Edit schedule"
                           >
@@ -351,10 +405,10 @@ export default function Dashboard() {
                               <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-10-4l9-9 4 4-9 9H7v-4z" />
                             </svg>
                           </button>
-                          </td>
-                          <td className="border border-gray-300 px-2 py-2 text-center w-12">
+                        </td>
+                        <td className="border border-gray-300 px-2 py-2 text-center w-12">
                           <button
-                            onClick={() => deleteItem("schedule", schedule.id)}
+                            onClick={() => deleteItem("schedule", schedule._id)}
                             className="bg-red-500 text-white px-2 py-1 rounded-full hover:bg-red-600 inline-flex items-center justify-center cursor-pointer"
                             aria-label="Delete schedule"
                           >
@@ -369,9 +423,9 @@ export default function Dashboard() {
                 </table>
               )}
             </div>
-            <div className="flex flex-col flex-1 bg-grey shadow border-dotted border-2 border-yellow-400 rounded-lg p-1 relative overflow-scroll overflow-x-auto">
+            <div className="flex flex-col flex-1 bg-grey shadow border-dotted border-2 border-yellow-400 rounded-lg h-auto p-1 relative overflow-scroll overflow-x-auto">
               <div className="flex justify-between items-center bg-gray-500 rounded-t-sm p-1 sticky top-0 z-10 border-1 border-black">
-                <h1 className="text-black text-2xl font-bold">Upcoming Tasks</h1>
+                <h1 className="text-black text-2xl font-bold">Tasks</h1>
                 <button
                   onClick={() => openModal("task")}
                   className="bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 cursor-pointer"
@@ -382,17 +436,17 @@ export default function Dashboard() {
               </div>
               {tasks.length === 0 ? (
                 <div className="flex justify-center items-center text-center text-black p-2">
-                  No task
+                  No tasks
                 </div>
               ) : (
                 <table className="min-w-full text-black bg-grey p-1 border-separate border border-gray-300 table-auto">
                   <tbody>
                     {tasks.map((task) => (
-                      <tr key={task.id} className="bg-grey">
+                      <tr key={task._id} className="bg-grey">
                         <td className="border border-gray-300 px-4 py-2 break-words whitespace-normal max-w-xs">{task.text}</td>
                         <td className="border border-gray-300 px-2 py-2 text-center w-12">
                           <button
-                            onClick={() => openModal("task", task.text, task.id)}
+                            onClick={() => openModal("task", task.text, task._id)}
                             className="bg-yellow-500 text-white px-2 py-1 rounded-full hover:bg-yellow-600 inline-flex items-center justify-center cursor-pointer mr-2"
                             aria-label="Edit task"
                           >
@@ -400,10 +454,10 @@ export default function Dashboard() {
                               <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-10-4l9-9 4 4-9 9H7v-4z" />
                             </svg>
                           </button>
-                          </td>
-                          <td className="border border-gray-300 px-2 py-2 text-center w-12">
+                        </td>
+                        <td className="border border-gray-300 px-2 py-2 text-center w-12">
                           <button
-                            onClick={() => deleteItem("task", task.id)}
+                            onClick={() => deleteItem("task", task._id)}
                             className="bg-red-500 text-white px-2 py-1 rounded-full hover:bg-red-600 inline-flex items-center justify-center cursor-pointer"
                             aria-label="Delete task"
                           >
